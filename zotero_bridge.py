@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -95,6 +96,13 @@ def resolve_attachment_path(raw_path, attachment_key):
         return str(STORAGE_DIR / attachment_key / filename)
 
     return os.path.expanduser(raw_path)
+
+
+def default_output_path(collection_path):
+    stem = re.sub(r"[^A-Za-z0-9]+", "_", collection_path).strip("_").lower()
+    if not stem:
+        stem = "zotero_collection"
+    return Path(f"{stem}_bib_data.json")
 
 
 def fetch_authors(cur, item_id):
@@ -216,6 +224,16 @@ def parse_args():
         default=str(ZOTERO_DB),
         help=f"Path to zotero.sqlite (default: {ZOTERO_DB})",
     )
+    parser.add_argument(
+        "-o",
+        "--output",
+        help="Output JSON path. Defaults to '<collection>_bib_data.json'.",
+    )
+    parser.add_argument(
+        "--stdout",
+        action="store_true",
+        help="Print JSON to stdout instead of writing a file.",
+    )
     return parser.parse_args()
 
 
@@ -227,7 +245,17 @@ def main():
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    print(json.dumps(data, indent=2, ensure_ascii=False))
+    output = json.dumps(data, indent=2, ensure_ascii=False)
+    if args.stdout:
+        print(output)
+        return 0
+
+    output_path = Path(args.output).expanduser() if args.output else default_output_path(
+        data["collection"]["path"]
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(output + "\n", encoding="utf-8")
+    print(f"Wrote {output_path}")
     return 0
 
 
